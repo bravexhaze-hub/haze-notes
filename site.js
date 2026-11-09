@@ -2,6 +2,34 @@
 'use strict';
 const $=selector=>document.querySelector(selector);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const safeUrl=value=>{const s=String(value||'').trim();return /^(https?:\/\/|\/(?!\/)|\.\/|media\/)/i.test(s)?s:''};
+const safeInline=value=>{
+ let s=esc(value);
+ s=s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g,(all,alt,url)=>{const src=safeUrl(url.replace(/&amp;/g,'&'));return src?'<img src="'+esc(src)+'" alt="'+alt+'" loading="lazy">':alt});
+ s=s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,(all,label,url)=>{const src=safeUrl(url.replace(/&amp;/g,'&'));return src?'<a href="'+esc(src)+'" rel="noopener noreferrer" target="_blank">'+label+'</a>':label});
+ s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g,'<em>$1</em>');
+ return s;
+};
+const markdownToHtml=md=>{
+ const lines=String(md||'').replace(/\r\n?/g,'\n').split('\n');
+ let html='',paragraph=[],list=null,quote=[];
+ const flushP=()=>{if(paragraph.length){html+='<p>'+safeInline(paragraph.join(' '))+'</p>';paragraph=[]}};
+ const flushList=()=>{if(list){html+='</'+list+'>';list=null}};
+ const flushQuote=()=>{if(quote.length){html+='<blockquote>'+safeInline(quote.join(' '))+'</blockquote>';quote=[]}};
+ for(const line of lines){
+  if(!line.trim()){flushP();flushList();flushQuote();continue}
+  if(/^#{1,3}\s+/.test(line)){flushP();flushList();flushQuote();const m=line.match(/^(#{1,3})\s+(.+)$/);html+='<h'+m[1].length+'>'+safeInline(m[2])+'</h'+m[1].length+'>';continue}
+  if(/^>\s?/.test(line)){flushP();flushList();quote.push(line.replace(/^>\s?/,''));continue}
+  flushQuote();
+  let match=line.match(/^\s*[-*]\s+(.+)$/),kind=match?'ul':null;
+  if(!match){match=line.match(/^\s*\d+\.\s+(.+)$/);kind=match?'ol':null}
+  if(match){flushP();if(list!==kind){flushList();html+='<'+kind+'>';list=kind}html+='<li>'+safeInline(match[1])+'</li>';continue}
+  flushList();paragraph.push(line.trim());
+ }
+ flushP();flushList();flushQuote();return html;
+};
+
 let notes=[],category='All';
 const lookup=id=>notes.find(x=>x.id===id);
 function validPost(n){return n&&typeof n.id==='string'&&typeof n.title==='string'&&typeof n.body==='string'&&['Reviews','Culture','Gear','Field Notes'].includes(n.category)}
@@ -11,7 +39,7 @@ function render(){
  const q=$('#search').value.trim().toLowerCase();const rows=notes.filter(n=>(category==='All'||n.category===category)&&[n.title,n.body,n.label,n.category].join(' ').toLowerCase().includes(q));
  $('#list').innerHTML=rows.length?rows.map((n,i)=>`<article class="item" role="button" tabindex="0" data-id="${esc(n.id)}"><span class="num">${String(i+1).padStart(2,'0')}</span><div><h3>${esc(n.title)}</h3><small>${esc(n.label||'HAZE NOTES')}</small></div><small>${esc(n.category)}</small><span class="arrow">↗</span></article>`).join(''):'<p class="empty-archive">No entries here yet.</p>';
 }
-function openReader(id){const n=lookup(id);if(!n)return;$('#readerKicker').textContent=n.category+' / HAZE NOTES';$('#readerTitle').textContent=n.title;$('#readerLabel').textContent=n.label||'HAZE NOTES';$('#readerBody').textContent=n.body;$('#readerBody').classList.toggle('empty',!n.body);$('#readerArt').style.backgroundImage=n.image?`url("${n.image.replace(/["\\]/g,'')}")`:'';$('#reader').hidden=false;document.body.style.overflow='hidden';$('#reader').scrollTop=0;$('#readerClose').focus();history.replaceState(null,'','#note='+encodeURIComponent(id));}
+function openReader(id){const n=lookup(id);if(!n)return;$('#readerKicker').textContent=n.category+' / HAZE NOTES';$('#readerTitle').textContent=n.title;$('#readerLabel').textContent=n.label||'HAZE NOTES';$('#readerBody').innerHTML=markdownToHtml(n.body);$('#readerBody').classList.toggle('empty',!n.body);$('#readerArt').style.backgroundImage=n.image?`url("${n.image.replace(/["\\]/g,'')}")`:'';$('#reader').hidden=false;document.body.style.overflow='hidden';$('#reader').scrollTop=0;$('#readerClose').focus();history.replaceState(null,'','#note='+encodeURIComponent(id));}
 function closeReader(){ $('#reader').hidden=true;document.body.style.overflow='';history.replaceState(null,'',location.pathname+location.search);}
 for(const sel of ['#features','#list']){const parent=$(sel);parent.addEventListener('click',e=>{const el=e.target.closest('[data-id]');if(el)openReader(el.dataset.id)});parent.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const el=e.target.closest('[data-id]');if(el){e.preventDefault();openReader(el.dataset.id)}}})}
 $('#readerClose').onclick=closeReader;
