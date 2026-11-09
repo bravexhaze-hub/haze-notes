@@ -2,6 +2,7 @@ media:
   input: media
   output: /haze-notes/media
   rename: safe
+
 content:
   - name: posts
     label: Journal entries
@@ -9,11 +10,14 @@ content:
     path: content/posts
     format: json
     filename: "{primary}.json"
+    exclude: [README.md]
     view:
       primary: title
       fields: [title, category, date, published]
-      sort: date
-      order: desc
+      sort: [date, title]
+      default:
+        sort: date
+        order: desc
     fields:
       - name: title
         label: Title
@@ -26,19 +30,25 @@ content:
           values: [Reviews, Culture, Gear, Field Notes]
         required: true
       - name: label
-        label: Subtitle or byline
+        label: Subtitle or verdict
         type: string
       - name: date
         label: Publication date
         type: date
+        options:
+          format: yyyy-MM-dd
       - name: published
-        label: Published
+        label: Make public on HAZE.
         type: boolean
-        default: true
+        default: false
+        description: Keep this off while drafting. Switch it on when ready for public testing.
       - name: image
         label: Cover photograph
         type: image
       - name: body
-        label: Article text
-        type: text
+        label: Article
+        type: rich-text
         required: true
+        options:
+          format: markdown
+          switcher: true
